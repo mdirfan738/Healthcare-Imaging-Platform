@@ -1,0 +1,48 @@
+name: Deploy (Docker Compose)
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options: ["staging", "production"]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    name: "Deploy via Docker Compose (SSH)"
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    environment: ${{ inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # This platform intentionally deploys with plain Docker Compose on a single host
+      # (no Kubernetes/Helm/service mesh) per the project's deployment requirements.
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/healthcare-imaging-platform
+            git pull origin master
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull pacs-api ris-frontend
+            docker compose up -d --remove-orphans
+            docker image prune -f
+            # Basic smoke check
+            sleep 10
+            curl -fsS http://localhost:8080/health

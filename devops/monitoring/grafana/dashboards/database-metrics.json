@@ -1,0 +1,64 @@
+{
+  "title": "PACS - Database Metrics",
+  "uid": "pacs-db-metrics",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "PostgreSQL Up",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "pg_up", "legendFormat": "postgres" }]
+    },
+    {
+      "id": 2,
+      "title": "Active Connections",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "targets": [{ "expr": "pg_stat_activity_count{datname=\"pacs_db\"}", "legendFormat": "connections" }]
+    },
+    {
+      "id": 3,
+      "title": "Transactions Committed / Rolled Back",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "rate(pg_stat_database_xact_commit{datname=\"pacs_db\"}[5m])", "legendFormat": "commits" },
+        { "expr": "rate(pg_stat_database_xact_rollback{datname=\"pacs_db\"}[5m])", "legendFormat": "rollbacks" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Database Size (bytes)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "pg_database_size_bytes{datname=\"pacs_db\"}", "legendFormat": "size" }]
+    },
+    {
+      "id": 5,
+      "title": "Rows Fetched / Returned",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "rate(pg_stat_database_tup_fetched{datname=\"pacs_db\"}[5m])", "legendFormat": "fetched" },
+        { "expr": "rate(pg_stat_database_tup_returned{datname=\"pacs_db\"}[5m])", "legendFormat": "returned" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Cache Hit Ratio",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_database_blks_hit{datname=\"pacs_db\"}) / (sum(pg_stat_database_blks_hit{datname=\"pacs_db\"}) + sum(pg_stat_database_blks_read{datname=\"pacs_db\"}))",
+          "legendFormat": "hit ratio"
+        }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "unit": "percentunit" }, "overrides": [] }
+    }
+  ]
+}

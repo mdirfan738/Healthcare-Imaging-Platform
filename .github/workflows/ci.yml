@@ -1,0 +1,338 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+  RIS_IMAGE_NAME: ${{ github.repository }}/ris-frontend
+  PACS_IMAGE_NAME: ${{ github.repository }}/pacs-api
+  DOTNET_VERSION: "8.0.x"
+  NODE_VERSION: "20.x"
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  # =====================================================================
+  # 1. BUILD DEPENDENCIES
+  # =====================================================================
+  frontend-deps:
+    name: "Frontend / Install Dependencies"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm install
+        working-directory: frontend
+        run: npm install --legacy-peer-deps
+
+  backend-deps:
+    name: "Backend / Restore Dependencies"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: dotnet restore
+        working-directory: backend
+        run: dotnet restore PACS.sln
+
+  # =====================================================================
+  # 2. CODE QUALITY
+  # =====================================================================
+  frontend-code-quality:
+    name: "Frontend / Lint + Type Check"
+    runs-on: ubuntu-latest
+    needs: frontend-deps
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install --legacy-peer-deps
+        working-directory: frontend
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint
+      - name: TypeScript validation
+        working-directory: frontend
+        run: npm run type-check
+
+  backend-code-quality:
+    name: "Backend / dotnet format"
+    runs-on: ubuntu-latest
+    needs: backend-deps
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore PACS.sln
+        working-directory: backend
+      - name: Verify formatting (fails on unformatted code)
+        working-directory: backend
+        run: dotnet format PACS.sln --verify-no-changes --severity warn
+
+  # =====================================================================
+  # 3. UNIT TESTING + COVERAGE
+  # =====================================================================
+  frontend-tests:
+    name: "Frontend / Jest Tests"
+    runs-on: ubuntu-latest
+    needs: frontend-code-quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install --legacy-peer-deps
+        working-directory: frontend
+      - name: Run Jest with coverage
+        working-directory: frontend
+        run: npm run test:coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+
+  backend-tests:
+    name: "Backend / xUnit Tests"
+    runs-on: ubuntu-latest
+    needs: backend-code-quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore PACS.sln
+        working-directory: backend
+      - name: Run xUnit tests with coverage
+        working-directory: backend
+        run: >
+          dotnet test PACS.sln --no-restore --configuration Release
+          --collect:"XPlat Code Coverage"
+          --results-directory ./coverage
+          --logger "trx;LogFileName=test-results.trx"
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage
+
+  # =====================================================================
+  # 4. SECURITY SCANNING
+  # =====================================================================
+  codeql-analysis:
+    name: "Security / CodeQL"
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      matrix:
+        language: ["javascript-typescript", "csharp"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  gitleaks-scan:
+    name: "Security / Gitleaks (Secret Scanning)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: devops/security/.gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: "true"
+        # gitleaks-action exits non-zero (fails the job) if any leak is found.
+
+  npm-audit:
+    name: "Security / npm audit"
+    runs-on: ubuntu-latest
+    needs: frontend-deps
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install --legacy-peer-deps
+        working-directory: frontend
+      - name: npm audit (fail on high/critical)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  dotnet-vulnerability-scan:
+    name: "Security / .NET Package Vulnerability Scan"
+    runs-on: ubuntu-latest
+    needs: backend-deps
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore PACS.sln
+        working-directory: backend
+      - name: Scan for vulnerable NuGet packages
+        working-directory: backend
+        run: |
+          set -e
+          OUTPUT=$(dotnet list PACS.sln package --vulnerable --include-transitive 2>&1)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qi "critical\|high severity"; then
+            echo "::error::Critical or high-severity vulnerable NuGet packages detected."
+            exit 1
+          fi
+
+  # =====================================================================
+  # 5. BUILD STAGE
+  # =====================================================================
+  frontend-build:
+    name: "Frontend / npm run build"
+    runs-on: ubuntu-latest
+    needs: [frontend-tests, npm-audit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install --legacy-peer-deps
+        working-directory: frontend
+      - name: Build production bundle
+        working-directory: frontend
+        run: npm run build
+        env:
+          REACT_APP_API_BASE_URL: ${{ vars.RIS_API_BASE_URL || 'http://localhost:8080/api/v1' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/build
+
+  backend-build:
+    name: "Backend / dotnet publish"
+    runs-on: ubuntu-latest
+    needs: [backend-tests, dotnet-vulnerability-scan]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore PACS.sln
+        working-directory: backend
+      - name: Publish
+        working-directory: backend
+        run: dotnet publish src/PACS.Api/PACS.Api.csproj -c Release -o ./publish --no-restore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-publish
+          path: backend/publish
+
+  # =====================================================================
+  # 6. DOCKER BUILD + PUSH TO GHCR (+ Trivy scan)
+  # =====================================================================
+  docker-build-push:
+    name: "Docker / Build, Scan, Push Images"
+    runs-on: ubuntu-latest
+    needs: [frontend-build, backend-build, codeql-analysis, gitleaks-scan]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # ---- PACS API image ----
+      - name: Build PACS API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          tags: ${{ env.REGISTRY }}/${{ env.PACS_IMAGE_NAME }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.PACS_IMAGE_NAME }}:latest
+          load: true
+          push: false
+
+      - name: Trivy scan - PACS API image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.PACS_IMAGE_NAME }}:${{ github.sha }}
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push PACS API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          tags: ${{ env.REGISTRY }}/${{ env.PACS_IMAGE_NAME }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.PACS_IMAGE_NAME }}:latest
+          push: true
+
+      # ---- RIS Frontend image ----
+      - name: Build RIS frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          tags: ${{ env.REGISTRY }}/${{ env.RIS_IMAGE_NAME }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.RIS_IMAGE_NAME }}:latest
+          load: true
+          push: false
+
+      - name: Trivy scan - RIS frontend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.RIS_IMAGE_NAME }}:${{ github.sha }}
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push RIS frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          tags: ${{ env.REGISTRY }}/${{ env.RIS_IMAGE_NAME }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.RIS_IMAGE_NAME }}:latest
+          push: true

@@ -1,0 +1,9 @@
+{
+  "short_name": "RIS",
+  "name": "Radiology Information System",
+  "icons": [],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0B5394",
+  "background_color": "#ffffff"
+}

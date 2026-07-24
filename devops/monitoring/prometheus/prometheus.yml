@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # PACS API - exposes /metrics via prometheus-net.AspNetCore
+  - job_name: "pacs-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["pacs-api:8080"]
+        labels:
+          service: "pacs-api"
+
+  # PostgreSQL metrics via postgres_exporter
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: "postgres"
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1,0 +1,142 @@
+version: "3.9"
+
+name: healthcare-imaging-platform
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: pacs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pacs_db
+      POSTGRES_USER: pacs_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pacs_user -d pacs_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [pacs-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: pacs-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-devredispassword}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-devredispassword}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [pacs-net]
+
+  pacs-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pacs-api
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__PostgreSql: "Host=postgres;Port=5432;Database=pacs_db;Username=pacs_user;Password=${POSTGRES_PASSWORD:-devpassword}"
+      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-devredispassword}"
+      Jwt__Secret: ${JWT_SECRET:-CHANGE_ME_MIN_32_CHARACTERS_USE_A_SECRETS_MANAGER}
+      Jwt__Issuer: PACS.Api
+      Jwt__Audience: RIS.Frontend
+      Cors__AllowedOrigins__0: ${RIS_ORIGIN:-http://localhost:3000}
+      Dicom__StoragePath: /dicom-storage
+    ports:
+      - "8080:8080"
+    volumes:
+      - dicom-storage:/dicom-storage
+      - pacs-logs:/var/log/pacs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [pacs-net]
+
+  ris-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${RIS_API_BASE_URL:-http://localhost:8080/api/v1}
+    container_name: ris-frontend
+    restart: unless-stopped
+    depends_on:
+      - pacs-api
+    ports:
+      - "3000:3000"
+    networks: [pacs-net]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: pacs-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./devops/monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - pacs-api
+    networks: [pacs-net]
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: pacs-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./devops/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./devops/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks: [pacs-net]
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: pacs-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://pacs_user:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/pacs_db?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [pacs-net]
+
+networks:
+  pacs-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  dicom-storage:
+  pacs-logs:
+  prometheus-data:
+  grafana-data:

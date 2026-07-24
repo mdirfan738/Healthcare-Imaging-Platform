@@ -1,0 +1,16 @@
+name: "PACS/RIS CodeQL Config"
+
+queries:
+  - uses: security-and-quality
+
+paths:
+  - backend/src
+  - frontend/src
+
+paths-ignore:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "backend/tests/**"
+  - "**/node_modules/**"
+  - "**/bin/**"
+  - "**/obj/**"

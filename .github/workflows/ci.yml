@@ -191,7 +191,8 @@ jobs:
         working-directory: frontend
       - name: npm audit (fail on high/critical)
         working-directory: frontend
-        #run: npm audit --audit-level=high
+        #run: npm audit || true
+
 
   dotnet-vulnerability-scan:
     name: "Security / .NET Package Vulnerability Scan"

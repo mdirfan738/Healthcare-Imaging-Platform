@@ -322,7 +322,7 @@ jobs:
           push: false
 
       - name: Trivy scan - RIS frontend image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.RIS_IMAGE_NAME }}:${{ github.sha }}
           format: "table"

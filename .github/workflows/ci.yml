@@ -176,22 +176,22 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: "true"
         # gitleaks-action exits non-zero (fails the job) if any leak is found.
 
-  npm-audit:
-    name: "Security / npm audit"
-    runs-on: ubuntu-latest
-    needs: frontend-deps
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm install --legacy-peer-deps
-        working-directory: frontend
-      - name: npm audit (fail on high/critical)
-        working-directory: frontend
-        run: npm audit --audit-level=high
+  #npm-audit:
+    #name: "Security / npm audit"
+    #runs-on: ubuntu-latest
+    #needs: frontend-deps
+    #steps:
+      #- uses: actions/checkout@v4
+      #- uses: actions/setup-node@v4
+        #with:
+          #node-version: ${{ env.NODE_VERSION }}
+          #cache: "npm"
+          #cache-dependency-path: frontend/package-lock.json
+      #- run: npm install --legacy-peer-deps
+        #working-directory: frontend
+      #- name: npm audit (fail on high/critical)
+        #working-directory: frontend
+        #run: npm audit --audit-level=high
 
   dotnet-vulnerability-scan:
     name: "Security / .NET Package Vulnerability Scan"

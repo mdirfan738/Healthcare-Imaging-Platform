@@ -40,7 +40,6 @@ public class PatientServiceTests
         return (svc, db);
     }
 
-
     [Fact]
     public async Task CreateAsync_ShouldPersistPatient_AndGenerateUniquePatientNumber()
     {
@@ -70,7 +69,6 @@ public class PatientServiceTests
 
         (await db.Patients.CountAsync()).Should().Be(1);
     }
-
 
     [Fact]
     public async Task DeleteAsync_ShouldSoftDelete_NotHardDelete()
@@ -107,7 +105,6 @@ public class PatientServiceTests
         raw.IsDeleted.Should().BeTrue();
     }
 
-
     [Fact]
     public async Task GetByIdAsync_ShouldReturnNull_WhenPatientDoesNotExist()
     {
@@ -117,7 +114,6 @@ public class PatientServiceTests
 
         result.Should().BeNull();
     }
-
 
     [Fact]
     public async Task SearchAsync_ShouldFilterByName()
@@ -158,19 +154,19 @@ public class PatientServiceTests
             "127.0.0.1"
         );
 
-
-        var result = await svc.SearchAsync(
-            new PatientSearchQuery(
-                null,       // PatientNumber
-                "Alice",    // FirstName
-                null,       // LastName
-                1,          // PageNumber
-                10          // PageSize
-            )
+        // Using named record parameters ensures query fields map correctly
+        var query = new PatientSearchQuery(
+            PatientNumber: null,
+            Name: "Alice",
+            NationalId: null,
+            Page: 1,
+            PageSize: 10
         );
 
+        var result = await svc.SearchAsync(query);
 
         result.Total.Should().Be(1);
+        result.Items.Should().HaveCount(1);
         result.Items.First().FirstName.Should().Be("Alice");
     }
 }

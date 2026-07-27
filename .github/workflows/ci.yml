@@ -9,8 +9,10 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  RIS_IMAGE_NAME: ${{ github.repository }}/ris-frontend
-  PACS_IMAGE_NAME: ${{ github.repository }}/pacs-api
+
+  # GHCR repository names must be lowercase
+  RIS_IMAGE_NAME: mdirfan738/healthcare-imaging-platform/ris-frontend
+  PACS_IMAGE_NAME: mdirfan738/healthcare-imaging-platform/pacs-api
   DOTNET_VERSION: "8.0.x"
   NODE_VERSION: "20.x"
 

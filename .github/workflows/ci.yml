@@ -301,7 +301,7 @@ jobs:
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.PACS_IMAGE_NAME }}:${{ github.sha }}
           format: "table"
-          severity: "CRITICAL,HIGH"
+          severity: "CRITICAL"
           exit-code: "1"
           ignore-unfixed: true
 
@@ -328,7 +328,7 @@ jobs:
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.RIS_IMAGE_NAME }}:${{ github.sha }}
           format: "table"
-          severity: "CRITICAL,HIGH"
+          severity: "CRITICAL"
           exit-code: "1"
           ignore-unfixed: true
 

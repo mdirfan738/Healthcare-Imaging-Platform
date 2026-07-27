@@ -84,11 +84,11 @@ public class JwtService : IJwtService
                 ClockSkew = TimeSpan.FromSeconds(30)
             }, out _);
 
-            // Fallback check to find the user ID across sub or NameIdentifier
-            var sub = principal.FindFirst("sub")?.Value 
-                   ?? principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value 
-                   ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var subClaim = principal.FindFirst("sub")
+                ?? principal.FindFirst(JwtRegisteredClaimNames.Sub)
+                ?? principal.FindFirst(ClaimTypes.NameIdentifier);
 
+            var sub = subClaim?.Value;
             return sub is null ? null : Guid.Parse(sub);
         }
         catch

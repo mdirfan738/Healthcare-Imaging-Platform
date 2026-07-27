@@ -27,9 +27,10 @@ public class JwtService : IJwtService
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username ?? string.Empty),
             new(ClaimTypes.Role, user.Role?.Name ?? "Unknown"),
-            new("fullName", user.FullName),
+            new("fullName", user.FullName ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -59,16 +60,23 @@ public class JwtService : IJwtService
 
     public Guid? ValidateAccessTokenAndGetUserId(string token)
     {
-        var secret = _config["Jwt:Secret"]!;
+        var secret = _config["Jwt:Secret"];
+        if (string.IsNullOrWhiteSpace(secret) || string.IsNullOrWhiteSpace(token))
+            return null;
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var handler = new JwtSecurityTokenHandler();
+
+        // Clear default inbound claim mapping so "sub" doesn't get converted into ClaimTypes.NameIdentifier
+        handler.InboundClaimTypeMap.Clear();
+
         try
         {
             var principal = handler.ValidateToken(token, new TokenValidationParameters
             {
-                ValidateIssuer = true,
+                ValidateIssuer = !string.IsNullOrEmpty(_config["Jwt:Issuer"]),
                 ValidIssuer = _config["Jwt:Issuer"],
-                ValidateAudience = true,
+                ValidateAudience = !string.IsNullOrEmpty(_config["Jwt:Audience"]),
                 ValidAudience = _config["Jwt:Audience"],
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = key,
@@ -76,7 +84,11 @@ public class JwtService : IJwtService
                 ClockSkew = TimeSpan.FromSeconds(30)
             }, out _);
 
-            var sub = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+            // Fallback check to find the user ID across sub or NameIdentifier
+            var sub = principal.FindFirst("sub")?.Value 
+                   ?? principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value 
+                   ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
             return sub is null ? null : Guid.Parse(sub);
         }
         catch

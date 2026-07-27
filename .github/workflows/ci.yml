@@ -295,7 +295,7 @@ jobs:
           push: false
 
       - name: Trivy scan - PACS API image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.PACS_IMAGE_NAME }}:${{ github.sha }}
           format: "table"

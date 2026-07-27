@@ -150,11 +150,12 @@ public class PatientService : IPatientService
 
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
-            var search = query.Name.Trim().ToLower();
+            var search = query.Name.Trim();
 
+            // Safe, case-insensitive search compatible with EF Core In-Memory and SQL providers
             q = q.Where(p =>
-                p.FirstName.ToLower().Contains(search) ||
-                p.LastName.ToLower().Contains(search));
+                (p.FirstName != null && EF.Functions.Like(p.FirstName, $"%{search}%")) ||
+                (p.LastName != null && EF.Functions.Like(p.LastName, $"%{search}%")));
         }
 
         if (!string.IsNullOrWhiteSpace(query.PatientNumber))
@@ -169,9 +170,12 @@ public class PatientService : IPatientService
 
         var total = await q.CountAsync();
 
+        // Prevent negative skip calculation if Page is passed as 0
+        var pageNumber = query.Page < 1 ? 1 : query.Page;
+
         var items = await q
             .OrderBy(p => p.LastName)
-            .Skip((query.Page - 1) * query.PageSize)
+            .Skip((pageNumber - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(p => new PatientResponse(
                 p.Id,
@@ -189,7 +193,7 @@ public class PatientService : IPatientService
         return new PagedResult<PatientResponse>(
             items,
             total,
-            query.Page,
+            pageNumber,
             query.PageSize);
     }
 }

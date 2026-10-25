@@ -163,20 +163,22 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}"
 
+  
   gitleaks-scan:
     name: "Security / Gitleaks (Secret Scanning)"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: devops/security/.gitleaks.toml
           GITLEAKS_ENABLE_COMMENTS: "true"
-        # gitleaks-action exits non-zero (fails the job) if any leak is found.
+        # Gitleaks fails the job if a secret is detected.
 
   npm-audit:
     name: "Security / npm audit"

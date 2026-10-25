@@ -25,3 +25,20 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Terraform local cache and downloaded providers
+**/.terraform/*
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+
+# Local Terraform variables and secrets
+terraform.tfvars
+terraform.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Terraform crash logs
+crash.log
+crash.*.log

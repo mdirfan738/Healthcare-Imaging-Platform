@@ -1,0 +1,17 @@
+variable "name_prefix" { type = string }
+variable "environment" { type = string }
+variable "private_subnet_ids" { type = list(string) }
+variable "db_cache_sg_id" { type = string }
+variable "db_instance_class" { type = string }
+variable "db_allocated_storage" { type = number }
+variable "db_multi_az" { type = bool }
+variable "db_deletion_protection" { type = bool }
+variable "db_username" { type = string }
+variable "db_password" { type = string }
+variable "redis_node_type" { type = string }
+variable "redis_num_cache_clusters" { type = number }
+variable "jwt_secret" { type = string }
+variable "smtp_sender_email" { type = string }
+variable "smtp_username" { type = string }
+variable "smtp_password" { type = string }
+variable "smtp_default_notification_email" { type = string }

@@ -1,0 +1,83 @@
+name: Deploy to AWS Production (Zero-Downtime ECS + S3/CloudFront)
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECS_CLUSTER: pacs-prod-cluster
+  ECS_SERVICE: pacs-api-service
+  ECR_REPOSITORY: pacs-api
+  FRONTEND_S3_BUCKET: ris-frontend-prod-bucket
+  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+
+jobs:
+  deploy-aws:
+    name: "Zero-Downtime Deploy (ECS Fargate & CloudFront)"
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push PACS.Api Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        working-directory: ./Healthcare/backend
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Render & Deploy New ECS Task Definition (Zero-Downtime Rolling Update)
+        id: render-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ./Healthcare/aws/ecs-task-definition.json
+          container-name: pacs-api
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Update Amazon ECS Service & Wait for Stability
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Build RIS React Frontend for CloudFront
+        working-directory: ./Healthcare/frontend
+        run: |
+          npm ci --legacy-peer-deps
+          VITE_API_BASE_URL=${{ secrets.PROD_API_BASE_URL }} npm run build
+
+      - name: Sync RIS Frontend Static Assets to S3
+        working-directory: ./Healthcare/frontend
+        run: |
+          aws s3 sync ./build/ s3://${{ env.FRONTEND_S3_BUCKET }}/ --delete --cache-control "public,max-age=31536000,immutable" --exclude "index.html"
+          aws s3 cp ./build/index.html s3://${{ env.FRONTEND_S3_BUCKET }}/index.html --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: Invalidate CloudFront Edge Cache
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/index.html" "/manifest.json"
+

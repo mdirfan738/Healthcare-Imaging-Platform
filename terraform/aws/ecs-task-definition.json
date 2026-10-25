@@ -1,0 +1,106 @@
+{
+  "family": "pacs-api-production",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/pacsEcsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/pacsEcsTaskRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "volumes": [
+    {
+      "name": "dicom-efs-storage",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "<EFS_FILE_SYSTEM_ID>",
+        "rootDirectory": "/",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {
+          "accessPointId": "<EFS_ACCESS_POINT_ID>",
+          "iam": "ENABLED"
+        }
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "pacs-api",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/pacs-api:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "ASPNETCORE_ENVIRONMENT", "value": "Production" },
+        { "name": "ASPNETCORE_URLS", "value": "http://+:8080" },
+        { "name": "Jwt__Issuer", "value": "PACS.Api" },
+        { "name": "Jwt__Audience", "value": "RIS.Frontend" },
+        { "name": "Cors__AllowedOrigins__0", "value": "https://app.yourdomain.com" },
+        { "name": "Dicom__StoragePath", "value": "/dicom-storage" },
+        { "name": "Smtp__Host", "value": "smtp.gmail.com" },
+        { "name": "Smtp__Port", "value": "587" },
+        { "name": "Smtp__EnableSsl", "value": "true" },
+        { "name": "Smtp__SenderName", "value": "Healthcare Imaging Platform" },
+        { "name": "Smtp__PortalBaseUrl", "value": "https://app.yourdomain.com" }
+      ],
+      "secrets": [
+        {
+          "name": "ConnectionStrings__PostgreSql",
+          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/ConnectionStrings__PostgreSql"
+        },
+        {
+          "name": "ConnectionStrings__Redis",
+          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/ConnectionStrings__Redis"
+        },
+        {
+          "name": "Jwt__Secret",
+          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Jwt__Secret"
+        },
+        {
+          "name": "Smtp__SenderEmail",
+          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__SenderEmail"
+        },
+        {
+          "name": "Smtp__Username",
+          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__Username"
+        },
+        {
+          "name": "Smtp__Password",
+          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__Password"
+        },
+        {
+          "name": "Smtp__DefaultNotificationEmail",
+          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__DefaultNotificationEmail"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "dicom-efs-storage",
+          "containerPath": "/dicom-storage",
+          "readOnly": false
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/pacs-api-prod",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+
+:root {
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: #27252a;
+  background: #f7f7f9;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --lm-primary: #a51224;
+  --lm-primary-dark: #81101f;
+  --lm-border: #ece8ee;
+  --lm-muted: #89828d;
+  --lm-background: #f7f7f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgb(165 18 36 / 35%);
+  outline-offset: 2px;
+}
+
+a {
+  color: inherit;
+}
+
+.lm-app-layout {
+  min-height: 100vh;
+}
+
+.lm-app-main {
+  min-width: 0;
+  min-height: 100vh;
+  margin-left: 264px;
+  transition: margin-left 180ms ease;
+}
+
+/* Match the content width to the collapsed sidebar. */
+.lm-sidebar--collapsed + .lm-app-main {
+  margin-left: 76px;
+}
+
+.lm-feature-page-card {
+  max-width: 760px;
+  margin: 30px auto;
+  padding: 34px;
+  background: #fff;
+  border: 1px solid var(--lm-border);
+  border-radius: 16px;
+  box-shadow: 0 5px 25px rgb(35 20 35 / 4%);
+}
+
+.lm-feature-page-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 23px;
+  place-items: center;
+  color: var(--lm-primary);
+  background: #fff0f2;
+  border-radius: 15px;
+}
+
+.lm-feature-page-card h2 {
+  margin: 8px 0;
+  font-size: 25px;
+  letter-spacing: -0.5px;
+}
+
+.lm-feature-page-card > p {
+  margin: 0;
+  color: var(--lm-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.lm-feature-page-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 26px;
+  padding: 18px;
+  background: #fff8f8;
+  border: 1px solid #f1dadd;
+  border-radius: 10px;
+}
+
+.lm-feature-page-notice strong {
+  color: #8f1422;
+  font-size: 13px;
+}
+
+.lm-feature-page-notice span {
+  color: #756c74;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.lm-feature-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 23px;
+}
+
+.lm-route-label {
+  display: block;
+  margin-top: 25px;
+  color: #a19aa5;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .lm-app-main,
+  .lm-sidebar--collapsed + .lm-app-main {
+    margin-left: 0;
+  }
+
+  .lm-feature-page-card {
+    margin: 15px;
+    padding: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

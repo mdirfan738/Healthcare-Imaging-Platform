@@ -1,0 +1,22 @@
+title = "PACS/RIS Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+# Project-specific allowlist: placeholder/example secrets that are intentionally
+# committed as documentation and are never valid credentials.
+[allowlist]
+description = "Allow known placeholder values in config templates"
+regexes = [
+  '''CHANGE_ME_[A-Z0-9_]*''',
+  '''devpassword''',
+  '''devredispassword''',
+  '''changeme''',
+]
+paths = [
+  '''backend/src/PACS.Api/appsettings\.json''',
+  '''backend/src/PACS.Api/appsettings\.Development\.json''',
+  '''docker-compose\.yml''',
+  '''database/scripts/01_seed_roles_and_admin\.sql''',
+  '''.*\.md$''',
+]

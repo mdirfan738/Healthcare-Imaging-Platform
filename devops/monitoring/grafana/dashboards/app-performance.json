@@ -1,0 +1,50 @@
+{
+  "title": "PACS - Application Performance",
+  "uid": "pacs-app-performance",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": ".NET GC Heap Size (bytes)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "dotnet_total_memory_bytes{job=\"pacs-api\"}", "legendFormat": "heap size" }]
+    },
+    {
+      "id": 2,
+      "title": "CPU Usage (process)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "rate(process_cpu_seconds_total{job=\"pacs-api\"}[5m])", "legendFormat": "cpu" }]
+    },
+    {
+      "id": 3,
+      "title": "Requests by Endpoint",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "sum(rate(http_requests_received_total{job=\"pacs-api\"}[5m])) by (path)", "legendFormat": "{{path}}" }]
+    },
+    {
+      "id": 4,
+      "title": "Active Threads / Thread Pool",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "expr": "dotnet_threadpool_num_threads{job=\"pacs-api\"}", "legendFormat": "threads" }]
+    },
+    {
+      "id": 5,
+      "title": "DICOM Image Upload Duration (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"pacs-api\",path=~\"/api/v1/images/upload\"}[5m])) by (le))",
+          "legendFormat": "p95 upload duration"
+        }
+      ]
+    }
+  ]
+}

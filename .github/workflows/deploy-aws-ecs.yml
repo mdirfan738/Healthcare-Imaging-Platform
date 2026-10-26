@@ -1,3 +1,4 @@
+
 name: Deploy to AWS Production (Zero-Downtime ECS + S3/CloudFront)
 
 on:
@@ -8,8 +9,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
+  id-token: write
 
 env:
   AWS_REGION: ap-south-1
@@ -17,16 +18,35 @@ env:
   ECS_SERVICE: pacs-api-service
   ECR_REPOSITORY: pacs-api
   FRONTEND_S3_BUCKET: ris-frontend-prod-bucket
-  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
 
 jobs:
   deploy-aws:
-    name: "Zero-Downtime Deploy (ECS Fargate & CloudFront)"
+    name: Deploy API and Frontend
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    environment: production
+
+    # Deploy only after successful CI, or when manually started.
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        github.event.workflow_run.conclusion == 'success'
+      }}
+
+    concurrency:
+      group: production-aws-deployment
+      cancel-in-progress: false
+
+    env:
+      DEPLOY_SHA: >-
+        ${{ github.event_name == 'workflow_run' &&
+            github.event.workflow_run.head_sha ||
+            github.sha }}
+
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -35,29 +55,71 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+      - name: Validate Deployment Configuration
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          PROD_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -n "$CLOUDFRONT_DISTRIBUTION_ID" || {
+            echo "CLOUDFRONT_DISTRIBUTION_ID is missing."
+            exit 1
+          }
+
+          test -n "$PROD_API_BASE_URL" || {
+            echo "PROD_API_BASE_URL is missing."
+            exit 1
+          }
+
+          test -f terraform/aws/ecs-task-definition.json || {
+            echo "ECS task definition file not found."
+            exit 1
+          }
+
+          test -f backend/Dockerfile || {
+            echo "backend/Dockerfile not found."
+            exit 1
+          }
+
+          test -f frontend/package-lock.json || {
+            echo "frontend/package-lock.json not found."
+            exit 1
+          }
+
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag, and Push PACS.Api Image to ECR
+      - name: Build and Push API Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        working-directory: ./backend
+        working-directory: backend
+        shell: bash
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          set -euo pipefail
 
-      - name: Render & Deploy New ECS Task Definition (Zero-Downtime Rolling Update)
+          docker build \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$DEPLOY_SHA" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            .
+
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$DEPLOY_SHA"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Render ECS Task Definition
         id: render-task
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: ./terraform/aws/ecs-task-definition.json
+          task-definition: terraform/aws/ecs-task-definition.json
           container-name: pacs-api
-          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.DEPLOY_SHA }}
 
-      - name: Update Amazon ECS Service & Wait for Stability
+      - name: Deploy ECS Service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-task.outputs.task-definition }}
@@ -65,19 +127,41 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
-      - name: Build RIS React Frontend for CloudFront
-        working-directory: ./frontend
+      - name: Build React Frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL }}
+        shell: bash
         run: |
+          set -euo pipefail
           npm ci --legacy-peer-deps
-          VITE_API_BASE_URL=${{ secrets.PROD_API_BASE_URL }} npm run build
+          npm run build
+          test -f build/index.html
 
-      - name: Sync RIS Frontend Static Assets to S3
-        working-directory: ./frontend
+      - name: Deploy Frontend Assets to S3
+        working-directory: frontend
+        shell: bash
         run: |
-          aws s3 sync ./build/ s3://${{ env.FRONTEND_S3_BUCKET }}/ --delete --cache-control "public,max-age=31536000,immutable" --exclude "index.html"
-          aws s3 cp ./build/index.html s3://${{ env.FRONTEND_S3_BUCKET }}/index.html --cache-control "no-cache,no-store,must-revalidate"
+          set -euo pipefail
 
-      - name: Invalidate CloudFront Edge Cache
+          # Upload versioned assets with long-lived caching.
+          aws s3 sync ./build/ "s3://$FRONTEND_S3_BUCKET/" \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html"
+
+          # Upload HTML separately so browsers can fetch the latest app.
+          aws s3 cp ./build/index.html \
+            "s3://$FRONTEND_S3_BUCKET/index.html" \
+            --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: Invalidate CloudFront Cache
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        shell: bash
         run: |
-          aws cloudfront create-invalidation --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/index.html" "/manifest.json"
+          set -euo pipefail
 
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths "/*"

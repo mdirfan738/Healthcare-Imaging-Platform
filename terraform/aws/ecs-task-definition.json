@@ -4,30 +4,16 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
   "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/pacsEcsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/pacsEcsTaskRole",
+  "executionRoleArn": "arn:aws:iam::762687106929:role/pacsEcsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::762687106929:role/pacsEcsTaskRole",
   "runtimePlatform": {
     "cpuArchitecture": "X86_64",
     "operatingSystemFamily": "LINUX"
   },
-  "volumes": [
-    {
-      "name": "dicom-efs-storage",
-      "efsVolumeConfiguration": {
-        "fileSystemId": "<EFS_FILE_SYSTEM_ID>",
-        "rootDirectory": "/",
-        "transitEncryption": "ENABLED",
-        "authorizationConfig": {
-          "accessPointId": "<EFS_ACCESS_POINT_ID>",
-          "iam": "ENABLED"
-        }
-      }
-    }
-  ],
   "containerDefinitions": [
     {
       "name": "pacs-api",
-      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/pacs-api:latest",
+      "image": "762687106929.dkr.ecr.ap-south-1.amazonaws.com/pacs-api:latest",
       "essential": true,
       "portMappings": [
         {
@@ -41,49 +27,42 @@
         { "name": "ASPNETCORE_URLS", "value": "http://+:8080" },
         { "name": "Jwt__Issuer", "value": "PACS.Api" },
         { "name": "Jwt__Audience", "value": "RIS.Frontend" },
-        { "name": "Cors__AllowedOrigins__0", "value": "https://app.yourdomain.com" },
+        { "name": "Cors__AllowedOrigins__0", "value": "https://alua2kg.online" },
         { "name": "Dicom__StoragePath", "value": "/dicom-storage" },
         { "name": "Smtp__Host", "value": "smtp.gmail.com" },
         { "name": "Smtp__Port", "value": "587" },
         { "name": "Smtp__EnableSsl", "value": "true" },
         { "name": "Smtp__SenderName", "value": "Healthcare Imaging Platform" },
-        { "name": "Smtp__PortalBaseUrl", "value": "https://app.yourdomain.com" }
+        { "name": "Smtp__PortalBaseUrl", "value": "https://alua2kg.online" }
       ],
       "secrets": [
         {
           "name": "ConnectionStrings__PostgreSql",
-          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/ConnectionStrings__PostgreSql"
+          "valueFrom": "arn:aws:ssm:ap-south-1:762687106929:parameter/pacs/prod/ConnectionStrings__PostgreSql"
         },
         {
           "name": "ConnectionStrings__Redis",
-          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/ConnectionStrings__Redis"
+          "valueFrom": "arn:aws:ssm:ap-south-1:762687106929:parameter/pacs/prod/ConnectionStrings__Redis"
         },
         {
           "name": "Jwt__Secret",
-          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Jwt__Secret"
+          "valueFrom": "arn:aws:ssm:ap-south-1:762687106929:parameter/pacs/prod/Jwt__Secret"
         },
         {
           "name": "Smtp__SenderEmail",
-          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__SenderEmail"
+          "valueFrom": "arn:aws:ssm:ap-south-1:762687106929:parameter/pacs/prod/Smtp__SenderEmail"
         },
         {
           "name": "Smtp__Username",
-          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__Username"
+          "valueFrom": "arn:aws:ssm:ap-south-1:762687106929:parameter/pacs/prod/Smtp__Username"
         },
         {
           "name": "Smtp__Password",
-          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__Password"
+          "valueFrom": "arn:aws:ssm:ap-south-1:762687106929:parameter/pacs/prod/Smtp__Password"
         },
         {
           "name": "Smtp__DefaultNotificationEmail",
-          "valueFrom": "arn:aws:ssm:<AWS_REGION>:<AWS_ACCOUNT_ID>:parameter/pacs/prod/Smtp__DefaultNotificationEmail"
-        }
-      ],
-      "mountPoints": [
-        {
-          "sourceVolume": "dicom-efs-storage",
-          "containerPath": "/dicom-storage",
-          "readOnly": false
+          "valueFrom": "arn:aws:ssm:ap-south-1:762687106929:parameter/pacs/prod/Smtp__DefaultNotificationEmail"
         }
       ],
       "healthCheck": {
@@ -97,8 +76,9 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/pacs-api-prod",
-          "awslogs-region": "<AWS_REGION>",
-          "awslogs-stream-prefix": "ecs"
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
         }
       }
     }
